@@ -272,14 +272,17 @@ export default function OrderPage() {
             )}
           </div>
 
-          {!order.isApplied ? (
-            <div style={styles.inputMode}>
-              <div style={styles.inputHeader}>
+        {!order.isApplied ? (
+          <div style={styles.inputMode}>
+            <div style={styles.inputHeader}>
+              <div>
                 <label style={styles.label}>📝 주문 정보 입력</label>
-                <button onClick={() => fillTemplate(order.id)} style={styles.fillBtn}>
-                  항목 채우기
-                </button>
+                <p style={styles.hint}>* 해당되는 항목만 입력하고, 해당되지 않는 항목은 빈칸으로 제출하셔도 됩니다.</p>
               </div>
+              <button onClick={() => fillTemplate(order.id)} style={styles.fillBtn}>
+                항목 채우기
+              </button>
+            </div>
               <textarea
                 ref={(el) => { textareaRefs.current[order.id] = el; }}
                 placeholder="복사한 주문 정보를 붙여넣기 하세요"
