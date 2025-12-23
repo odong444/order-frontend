@@ -119,7 +119,7 @@ export default function OrderPage() {
       formData.append('orders', JSON.stringify(ordersData));
       
       // 이미지 파일들
-      orders.forEach((order, index) => {
+      orders.forEach((order) => {
         if (order.image) {
           formData.append('images', order.image);
         }
@@ -450,6 +450,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px',
     borderRadius: '8px',
     fontSize: '18px',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    cursor: 'pointer'
   }
 };
