@@ -4,10 +4,8 @@ import { useState, useRef } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-// 담당자 목록 (시트명과 동일)
 const MANAGERS = ['태일', '서지은', '자인'];
 
-// 기본 필드 목록
 const DEFAULT_FIELDS = [
   '제품명', '수취인명', '연락처', '은행', '계좌(-)', '예금주',
   '결제금액', '아이디', '주문번호', '주소', '회수연락처'
@@ -20,33 +18,74 @@ interface OrderItem {
   imagePreview: string | null;
 }
 
+// 이미지 압축 함수
+const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
+  return new Promise((resolve) => {
+    // 이미 작은 파일은 압축 안함
+    if (file.size < 100 * 1024) {
+      resolve(file);
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const img = new Image();
+    
+    img.onload = () => {
+      let { width, height } = img;
+      
+      // 비율 유지하며 리사이즈
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width;
+        width = maxWidth;
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            });
+            console.log(`압축: ${(file.size/1024).toFixed(0)}KB → ${(compressedFile.size/1024).toFixed(0)}KB`);
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+    
+    img.src = URL.createObjectURL(file);
+  });
+};
+
 export default function OrderPage() {
   const [manager, setManager] = useState<string>('');
   const [orders, setOrders] = useState<OrderItem[]>([
     { id: Date.now(), data: {}, image: null, imagePreview: null }
   ]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState('');
   const [result, setResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
-  // 주문 추가
   const addOrder = () => {
-    setOrders([...orders, { 
-      id: Date.now(), 
-      data: {}, 
-      image: null, 
-      imagePreview: null 
-    }]);
+    setOrders([...orders, { id: Date.now(), data: {}, image: null, imagePreview: null }]);
   };
 
-  // 주문 삭제
   const removeOrder = (id: number) => {
     if (orders.length > 1) {
       setOrders(orders.filter(o => o.id !== id));
     }
   };
 
-  // 주문 복사 (마지막 주문 데이터 복사)
   const copyLastOrder = () => {
     const lastOrder = orders[orders.length - 1];
     setOrders([...orders, {
@@ -57,16 +96,12 @@ export default function OrderPage() {
     }]);
   };
 
-  // 필드 값 변경
   const updateField = (orderId: number, field: string, value: string) => {
     setOrders(orders.map(o => 
-      o.id === orderId 
-        ? { ...o, data: { ...o.data, [field]: value } }
-        : o
+      o.id === orderId ? { ...o, data: { ...o.data, [field]: value } } : o
     ));
   };
 
-  // 텍스트 파싱 (필드명: 값 형식)
   const parseText = (orderId: number, text: string) => {
     const lines = text.split('\n');
     const data: Record<string, string> = {};
@@ -78,27 +113,28 @@ export default function OrderPage() {
       }
     });
     
-    setOrders(orders.map(o => 
-      o.id === orderId ? { ...o, data } : o
-    ));
+    setOrders(orders.map(o => o.id === orderId ? { ...o, data } : o));
   };
 
-  // 이미지 선택
-  const handleImageChange = (orderId: number, file: File | null) => {
+  // 이미지 선택 시 압축 적용
+  const handleImageChange = async (orderId: number, file: File | null) => {
     if (file) {
+      setProgress('이미지 압축 중...');
+      const compressedFile = await compressImage(file);
+      setProgress('');
+      
       const reader = new FileReader();
       reader.onload = (e) => {
         setOrders(orders.map(o => 
           o.id === orderId 
-            ? { ...o, image: file, imagePreview: e.target?.result as string }
+            ? { ...o, image: compressedFile, imagePreview: e.target?.result as string }
             : o
         ));
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(compressedFile);
     }
   };
 
-  // 제출
   const handleSubmit = async () => {
     if (!manager) {
       setResult({ type: 'error', message: '담당자를 선택해주세요.' });
@@ -107,23 +143,20 @@ export default function OrderPage() {
 
     setLoading(true);
     setResult(null);
+    setProgress('업로드 준비 중...');
 
     try {
       const formData = new FormData();
-      
-      // 담당자 (시트명)
       formData.append('manager', manager);
+      formData.append('orders', JSON.stringify(orders.map(o => o.data)));
       
-      // 주문 데이터
-      const ordersData = orders.map(o => o.data);
-      formData.append('orders', JSON.stringify(ordersData));
-      
-      // 이미지 파일들
-      orders.forEach((order, index) => {
+      orders.forEach((order) => {
         if (order.image) {
           formData.append('images', order.image);
         }
       });
+
+      setProgress('서버에 전송 중...');
 
       const response = await fetch(`${API_URL}/api/submit-orders`, {
         method: 'POST',
@@ -134,7 +167,6 @@ export default function OrderPage() {
 
       if (data.success) {
         setResult({ type: 'success', message: data.message });
-        // 폼 초기화
         setOrders([{ id: Date.now(), data: {}, image: null, imagePreview: null }]);
       } else {
         setResult({ type: 'error', message: data.error || '저장 실패' });
@@ -143,6 +175,7 @@ export default function OrderPage() {
       setResult({ type: 'error', message: error.message || '네트워크 오류' });
     } finally {
       setLoading(false);
+      setProgress('');
     }
   };
 
@@ -172,12 +205,8 @@ export default function OrderPage() {
       </div>
 
       <div style={styles.buttonGroup}>
-        <button onClick={addOrder} style={styles.addBtn}>
-          + 새 주문 추가
-        </button>
-        <button onClick={copyLastOrder} style={styles.copyBtn}>
-          📋 마지막 주문 복사
-        </button>
+        <button onClick={addOrder} style={styles.addBtn}>+ 새 주문 추가</button>
+        <button onClick={copyLastOrder} style={styles.copyBtn}>📋 마지막 주문 복사</button>
       </div>
 
       {orders.map((order, index) => (
@@ -185,16 +214,10 @@ export default function OrderPage() {
           <div style={styles.cardHeader}>
             <span style={styles.orderNum}>주문 #{index + 1}</span>
             {orders.length > 1 && (
-              <button 
-                onClick={() => removeOrder(order.id)} 
-                style={styles.removeBtn}
-              >
-                ✕ 삭제
-              </button>
+              <button onClick={() => removeOrder(order.id)} style={styles.removeBtn}>✕ 삭제</button>
             )}
           </div>
 
-          {/* 빠른 입력 (텍스트 파싱) */}
           <div style={styles.quickInput}>
             <label style={styles.label}>📝 빠른 입력 (복사/붙여넣기)</label>
             <textarea
@@ -204,7 +227,6 @@ export default function OrderPage() {
             />
           </div>
 
-          {/* 필드 입력 */}
           <div style={styles.fieldsGrid}>
             {DEFAULT_FIELDS.map(field => (
               <div key={field} style={styles.fieldGroup}>
@@ -220,7 +242,6 @@ export default function OrderPage() {
             ))}
           </div>
 
-          {/* 이미지 업로드 */}
           <div style={styles.imageSection}>
             <label style={styles.label}>📸 구매내역 캡쳐</label>
             <div 
@@ -233,14 +254,8 @@ export default function OrderPage() {
             >
               {order.imagePreview ? (
                 <div>
-                  <img 
-                    src={order.imagePreview} 
-                    alt="미리보기" 
-                    style={styles.preview}
-                  />
-                  <p style={{ color: '#28a745', margin: '10px 0 0' }}>
-                    ✅ {order.image?.name}
-                  </p>
+                  <img src={order.imagePreview} alt="미리보기" style={styles.preview} />
+                  <p style={{ color: '#28a745', margin: '10px 0 0' }}>✅ {order.image?.name}</p>
                 </div>
               ) : (
                 <div>
@@ -260,6 +275,11 @@ export default function OrderPage() {
         </div>
       ))}
 
+      {/* 진행 상태 */}
+      {progress && (
+        <div style={styles.progress}>{progress}</div>
+      )}
+
       {/* 결과 메시지 */}
       {result && (
         <div style={{
@@ -271,7 +291,6 @@ export default function OrderPage() {
         </div>
       )}
 
-      {/* 제출 버튼 */}
       <button 
         onClick={handleSubmit} 
         disabled={loading}
@@ -288,168 +307,29 @@ export default function OrderPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: '900px',
-    margin: '0 auto',
-    padding: '20px',
-    backgroundColor: '#f8f9fa',
-    minHeight: '100vh'
-  },
-  title: {
-    textAlign: 'center',
-    color: '#333',
-    marginBottom: '20px'
-  },
-  managerSection: {
-    backgroundColor: 'white',
-    padding: '20px',
-    borderRadius: '12px',
-    marginBottom: '20px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    textAlign: 'center'
-  },
-  managerLabel: {
-    display: 'block',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    marginBottom: '15px',
-    color: '#333'
-  },
-  managerButtons: {
-    display: 'flex',
-    gap: '10px',
-    justifyContent: 'center',
-    flexWrap: 'wrap'
-  },
-  managerBtn: {
-    padding: '12px 30px',
-    borderRadius: '8px',
-    fontSize: '16px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-  buttonGroup: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '20px',
-    justifyContent: 'center'
-  },
-  addBtn: {
-    backgroundColor: '#4285f4',
-    color: 'white',
-    border: 'none',
-    padding: '12px 24px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '500'
-  },
-  copyBtn: {
-    backgroundColor: '#34a853',
-    color: 'white',
-    border: 'none',
-    padding: '12px 24px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '500'
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    padding: '20px',
-    marginBottom: '20px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '15px',
-    paddingBottom: '10px',
-    borderBottom: '2px solid #4285f4'
-  },
-  orderNum: {
-    fontSize: '18px',
-    fontWeight: 'bold',
-    color: '#4285f4'
-  },
-  removeBtn: {
-    backgroundColor: '#dc3545',
-    color: 'white',
-    border: 'none',
-    padding: '6px 12px',
-    borderRadius: '4px',
-    cursor: 'pointer'
-  },
-  quickInput: {
-    marginBottom: '20px'
-  },
-  label: {
-    display: 'block',
-    marginBottom: '5px',
-    fontWeight: '500',
-    color: '#333'
-  },
-  textarea: {
-    width: '100%',
-    height: '150px',
-    padding: '12px',
-    border: '1px solid #ddd',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontFamily: 'monospace',
-    resize: 'vertical',
-    boxSizing: 'border-box'
-  },
-  fieldsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-    gap: '15px',
-    marginBottom: '20px'
-  },
-  fieldGroup: {
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  input: {
-    padding: '10px',
-    border: '1px solid #ddd',
-    borderRadius: '6px',
-    fontSize: '14px'
-  },
-  imageSection: {
-    marginTop: '15px'
-  },
-  dropzone: {
-    border: '2px dashed #ddd',
-    borderRadius: '8px',
-    padding: '30px',
-    textAlign: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.3s'
-  },
-  preview: {
-    maxWidth: '100%',
-    maxHeight: '200px',
-    borderRadius: '8px'
-  },
-  result: {
-    padding: '15px',
-    borderRadius: '8px',
-    marginBottom: '20px',
-    textAlign: 'center',
-    fontWeight: '500'
-  },
-  submitBtn: {
-    width: '100%',
-    backgroundColor: '#4285f4',
-    color: 'white',
-    border: 'none',
-    padding: '16px',
-    borderRadius: '8px',
-    fontSize: '18px',
-    fontWeight: 'bold'
-  }
+  container: { maxWidth: '900px', margin: '0 auto', padding: '20px', backgroundColor: '#f8f9fa', minHeight: '100vh' },
+  title: { textAlign: 'center', color: '#333', marginBottom: '20px' },
+  managerSection: { backgroundColor: 'white', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center' },
+  managerLabel: { display: 'block', fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
+  managerButtons: { display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' },
+  managerBtn: { padding: '12px 30px', borderRadius: '8px', fontSize: '16px', fontWeight: '500', cursor: 'pointer' },
+  buttonGroup: { display: 'flex', gap: '10px', marginBottom: '20px', justifyContent: 'center' },
+  addBtn: { backgroundColor: '#4285f4', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: '500' },
+  copyBtn: { backgroundColor: '#34a853', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: '500' },
+  card: { backgroundColor: 'white', borderRadius: '12px', padding: '20px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', paddingBottom: '10px', borderBottom: '2px solid #4285f4' },
+  orderNum: { fontSize: '18px', fontWeight: 'bold', color: '#4285f4' },
+  removeBtn: { backgroundColor: '#dc3545', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' },
+  quickInput: { marginBottom: '20px' },
+  label: { display: 'block', marginBottom: '5px', fontWeight: '500', color: '#333' },
+  textarea: { width: '100%', height: '150px', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '14px', fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box' },
+  fieldsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' },
+  fieldGroup: { display: 'flex', flexDirection: 'column' },
+  input: { padding: '10px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px' },
+  imageSection: { marginTop: '15px' },
+  dropzone: { border: '2px dashed #ddd', borderRadius: '8px', padding: '30px', textAlign: 'center', cursor: 'pointer' },
+  preview: { maxWidth: '100%', maxHeight: '200px', borderRadius: '8px' },
+  progress: { padding: '15px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', backgroundColor: '#fff3cd', color: '#856404' },
+  result: { padding: '15px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', fontWeight: '500' },
+  submitBtn: { width: '100%', backgroundColor: '#4285f4', color: 'white', border: 'none', padding: '16px', borderRadius: '8px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }
 };
