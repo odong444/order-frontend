@@ -6,7 +6,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const MANAGERS = ['태일', '서지은', '자인'];
 
-// 필드 목록 수정
 const DEFAULT_FIELDS = [
   '제품명', '수취인명', '연락처', '은행', '계좌', '예금주',
   '결제금액', '아이디', '주문번호', '주소', '닉네임', '회수이름', '회수연락처'
@@ -17,10 +16,9 @@ interface OrderItem {
   data: Record<string, string>;
   image: File | null;
   imagePreview: string | null;
-  isApplied: boolean; // 적용 여부
+  isApplied: boolean;
 }
 
-// 이미지 압축 함수
 const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
   return new Promise((resolve) => {
     if (file.size < 100 * 1024) {
@@ -93,11 +91,10 @@ export default function OrderPage() {
       data: { ...lastOrder.data },
       image: null,
       imagePreview: null,
-      isApplied: true // 복사된 건 바로 적용 상태
+      isApplied: true
     }]);
   };
 
-  // 텍스트 파싱 후 적용
   const applyText = (orderId: number) => {
     const text = textInputRefs.current[orderId] || '';
     const lines = text.split('\n');
@@ -115,11 +112,9 @@ export default function OrderPage() {
     ));
   };
 
-  // 수정 모드로 전환
   const editOrder = (orderId: number) => {
     const order = orders.find(o => o.id === orderId);
     if (order) {
-      // 현재 데이터를 텍스트로 변환
       const text = Object.entries(order.data)
         .filter(([_, value]) => value)
         .map(([key, value]) => `${key}: ${value}`)
@@ -128,13 +123,6 @@ export default function OrderPage() {
     }
     setOrders(orders.map(o => 
       o.id === orderId ? { ...o, isApplied: false } : o
-    ));
-  };
-
-  // 필드 직접 수정
-  const updateField = (orderId: number, field: string, value: string) => {
-    setOrders(orders.map(o => 
-      o.id === orderId ? { ...o, data: { ...o.data, [field]: value } } : o
     ));
   };
 
@@ -162,7 +150,6 @@ export default function OrderPage() {
       return;
     }
 
-    // 적용 안된 주문 체크
     const notApplied = orders.filter(o => !o.isApplied);
     if (notApplied.length > 0) {
       setResult({ type: 'error', message: '모든 주문의 정보를 적용해주세요.' });
@@ -212,25 +199,19 @@ export default function OrderPage() {
     <div style={styles.container}>
       <h1 style={styles.title}>📦 주문 정보 입력</h1>
       
-      {/* 담당자 선택 */}
+      {/* 담당자 선택 - 드롭다운 */}
       <div style={styles.managerSection}>
         <label style={styles.managerLabel}>담당자 선택</label>
-        <div style={styles.managerButtons}>
+        <select
+          value={manager}
+          onChange={(e) => setManager(e.target.value)}
+          style={styles.managerSelect}
+        >
+          <option value="">-- 담당자 선택 --</option>
           {MANAGERS.map(m => (
-            <button
-              key={m}
-              onClick={() => setManager(m)}
-              style={{
-                ...styles.managerBtn,
-                backgroundColor: manager === m ? '#4285f4' : '#fff',
-                color: manager === m ? '#fff' : '#333',
-                border: manager === m ? '2px solid #4285f4' : '2px solid #ddd'
-              }}
-            >
-              {m}
-            </button>
+            <option key={m} value={m}>{m}</option>
           ))}
-        </div>
+        </select>
       </div>
 
       <div style={styles.buttonGroup}>
@@ -251,7 +232,6 @@ export default function OrderPage() {
           </div>
 
           {!order.isApplied ? (
-            /* 텍스트 입력 모드 */
             <div style={styles.inputMode}>
               <label style={styles.label}>📝 주문 정보 입력 (복사/붙여넣기)</label>
               <textarea
@@ -265,7 +245,6 @@ export default function OrderPage() {
               </button>
             </div>
           ) : (
-            /* 적용된 데이터 보기 모드 */
             <div style={styles.viewMode}>
               <div style={styles.dataGrid}>
                 {DEFAULT_FIELDS.map(field => (
@@ -283,9 +262,8 @@ export default function OrderPage() {
             </div>
           )}
 
-          {/* 이미지 업로드 */}
+          {/* 이미지 업로드 - 사이즈 축소 */}
           <div style={styles.imageSection}>
-            <label style={styles.label}>📸 구매내역 캡쳐</label>
             <div 
               style={{
                 ...styles.dropzone,
@@ -295,14 +273,14 @@ export default function OrderPage() {
               onClick={() => fileInputRefs.current[order.id]?.click()}
             >
               {order.imagePreview ? (
-                <div>
+                <div style={styles.imageRow}>
                   <img src={order.imagePreview} alt="미리보기" style={styles.preview} />
-                  <p style={{ color: '#28a745', margin: '10px 0 0', fontSize: '14px' }}>✅ 이미지 첨부됨</p>
+                  <span style={styles.imageText}>✅ 이미지 첨부됨</span>
                 </div>
               ) : (
-                <div>
-                  <p style={{ fontSize: '32px', margin: 0 }}>📷</p>
-                  <p style={{ color: '#666', fontSize: '14px' }}>클릭하여 이미지 선택</p>
+                <div style={styles.imageRow}>
+                  <span style={{ fontSize: '20px' }}>📷</span>
+                  <span style={styles.imageText}>클릭하여 구매내역 캡쳐 첨부</span>
                 </div>
               )}
             </div>
@@ -347,40 +325,41 @@ export default function OrderPage() {
 const styles: Record<string, React.CSSProperties> = {
   container: { maxWidth: '900px', margin: '0 auto', padding: '20px', backgroundColor: '#f8f9fa', minHeight: '100vh' },
   title: { textAlign: 'center', color: '#333', marginBottom: '20px' },
-  managerSection: { backgroundColor: 'white', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center' },
-  managerLabel: { display: 'block', fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
-  managerButtons: { display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' },
-  managerBtn: { padding: '12px 30px', borderRadius: '8px', fontSize: '16px', fontWeight: '500', cursor: 'pointer' },
+  
+  // 담당자 드롭다운
+  managerSection: { backgroundColor: 'white', padding: '15px 20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '15px' },
+  managerLabel: { fontSize: '15px', fontWeight: 'bold', color: '#333', whiteSpace: 'nowrap' },
+  managerSelect: { flex: 1, padding: '10px 15px', fontSize: '15px', border: '2px solid #ddd', borderRadius: '8px', cursor: 'pointer', backgroundColor: 'white' },
+  
   buttonGroup: { display: 'flex', gap: '10px', marginBottom: '20px', justifyContent: 'center' },
   addBtn: { backgroundColor: '#4285f4', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: '500' },
   copyBtn: { backgroundColor: '#34a853', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: '500' },
-  card: { backgroundColor: 'white', borderRadius: '12px', padding: '20px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' },
+  card: { backgroundColor: 'white', borderRadius: '12px', padding: '20px', marginBottom: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', paddingBottom: '10px', borderBottom: '2px solid #4285f4' },
   orderNum: { fontSize: '18px', fontWeight: 'bold', color: '#4285f4', display: 'flex', alignItems: 'center', gap: '10px' },
   appliedBadge: { fontSize: '12px', backgroundColor: '#28a745', color: 'white', padding: '3px 8px', borderRadius: '12px' },
   removeBtn: { backgroundColor: '#dc3545', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' },
   
-  // 입력 모드
   inputMode: { marginBottom: '15px' },
   label: { display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' },
-  textarea: { width: '100%', height: '200px', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '14px', fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box', marginBottom: '10px' },
+  textarea: { width: '100%', height: '180px', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '14px', fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box', marginBottom: '10px' },
   applyBtn: { backgroundColor: '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
   
-  // 보기 모드
   viewMode: { marginBottom: '15px' },
-  dataGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px', marginBottom: '10px' },
-  dataItem: { backgroundColor: '#f8f9fa', padding: '10px', borderRadius: '6px', border: '1px solid #e9ecef' },
-  dataLabel: { display: 'block', fontSize: '12px', color: '#666', marginBottom: '4px' },
-  dataValue: { display: 'block', fontSize: '14px', color: '#333', fontWeight: '500' },
+  dataGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginBottom: '10px' },
+  dataItem: { backgroundColor: '#f8f9fa', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e9ecef' },
+  dataLabel: { display: 'block', fontSize: '11px', color: '#666', marginBottom: '2px' },
+  dataValue: { display: 'block', fontSize: '13px', color: '#333', fontWeight: '500' },
   editBtn: { backgroundColor: '#6c757d', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' },
   
-  // 이미지
-  imageSection: { marginTop: '15px' },
-  dropzone: { border: '2px dashed #ddd', borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer' },
-  preview: { maxWidth: '100%', maxHeight: '150px', borderRadius: '8px' },
+  // 이미지 - 축소
+  imageSection: { marginTop: '12px' },
+  dropzone: { border: '2px dashed #ddd', borderRadius: '8px', padding: '12px 15px', cursor: 'pointer' },
+  imageRow: { display: 'flex', alignItems: 'center', gap: '10px' },
+  preview: { width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px' },
+  imageText: { fontSize: '14px', color: '#666' },
   
-  // 상태
-  progress: { padding: '15px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', backgroundColor: '#fff3cd', color: '#856404' },
-  result: { padding: '15px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', fontWeight: '500' },
+  progress: { padding: '12px', borderRadius: '8px', marginBottom: '15px', textAlign: 'center', backgroundColor: '#fff3cd', color: '#856404' },
+  result: { padding: '12px', borderRadius: '8px', marginBottom: '15px', textAlign: 'center', fontWeight: '500' },
   submitBtn: { width: '100%', backgroundColor: '#4285f4', color: 'white', border: 'none', padding: '16px', borderRadius: '8px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }
 };
