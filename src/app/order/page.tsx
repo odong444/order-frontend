@@ -278,6 +278,7 @@ export default function OrderPage() {
               <div>
                 <label style={styles.label}>📝 주문 정보 입력</label>
                 <p style={styles.hint}>* 해당되는 항목만 입력하고, 해당되지 않는 항목은 빈칸으로 제출하셔도 됩니다.</p>
+                <p style={styles.hint}>* [적용하기]버튼 꼭 누르고 제출해주세요!</p>
               </div>
               <button onClick={() => fillTemplate(order.id)} style={styles.fillBtn}>
                 항목 채우기
