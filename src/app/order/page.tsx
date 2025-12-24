@@ -192,6 +192,13 @@ export default function OrderPage() {
       return;
     }
 
+        // 이미지 첨부 체크 추가
+    const noImage = orders.filter(o => !o.image);
+    if (noImage.length > 0) {
+      setResult({ type: 'error', message: '모든 주문에 구매내역 캡쳐를 첨부해주세요.' });
+      return;
+    }
+
     setLoading(true);
     setResult(null);
     setProgress('업로드 준비 중...');
