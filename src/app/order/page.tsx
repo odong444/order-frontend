@@ -154,7 +154,7 @@ export default function OrderPage() {
 
     setLoading(true);
     setResult(null);
-    setProgress('서버에 전송 중...');
+    setProgress('서버에 전송중입니다.. 완료 메세지 뜨기 전까지 페이지 유지해주세요!');
 
     try {
       const formData = new FormData();
@@ -175,7 +175,7 @@ export default function OrderPage() {
       const data = await response.json();
 
       if (data.success) {
-        setResult({ type: 'success', message: data.message });
+        setResult({ type: 'success', message: '✅ 완료되었습니다!' });
         setOrders([{ id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false }]);
         textInputRefs.current = {};
       } else {
@@ -368,7 +368,7 @@ const styles: Record<string, React.CSSProperties> = {
   imageRow: { display: 'flex', alignItems: 'center', gap: '10px' },
   preview: { width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px' },
   imageText: { fontSize: '14px', color: '#666' },
-  progress: { padding: '12px', borderRadius: '8px', marginBottom: '15px', textAlign: 'center', backgroundColor: '#fff3cd', color: '#856404' },
+  progress: { padding: '12px', borderRadius: '8px', marginBottom: '15px', textAlign: 'center', backgroundColor: '#fff3cd', color: '#856404', fontWeight: '500' },
   result: { padding: '12px', borderRadius: '8px', marginBottom: '15px', textAlign: 'center', fontWeight: '500' },
   submitBtn: { width: '100%', backgroundColor: '#4285f4', color: 'white', border: 'none', padding: '16px', borderRadius: '8px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }
 };
