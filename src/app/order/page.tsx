@@ -29,55 +29,11 @@ const TEMPLATE = `제품명:
 
 interface OrderItem {
   id: number;
-  values: string[];  // 인덱스 기반 배열로 변경
+  values: string[];
   image: File | null;
   imagePreview: string | null;
   isApplied: boolean;
 }
-
-const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
-  return new Promise((resolve) => {
-    if (file.size < 100 * 1024) {
-      resolve(file);
-      return;
-    }
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
-    const img = new Image();
-    
-    img.onload = () => {
-      let { width, height } = img;
-      
-      if (width > maxWidth) {
-        height = (height * maxWidth) / width;
-        width = maxWidth;
-      }
-      
-      canvas.width = width;
-      canvas.height = height;
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now()
-            });
-            resolve(compressedFile);
-          } else {
-            resolve(file);
-          }
-        },
-        'image/jpeg',
-        quality
-      );
-    };
-    
-    img.src = URL.createObjectURL(file);
-  });
-};
 
 export default function OrderPage() {
   const [manager, setManager] = useState<string>('');
@@ -162,21 +118,18 @@ export default function OrderPage() {
     ));
   };
 
-  const handleImageChange = async (orderId: number, file: File | null) => {
+  // 이미지 압축 없이 바로 저장
+  const handleImageChange = (orderId: number, file: File | null) => {
     if (file) {
-      setProgress('이미지 압축 중...');
-      const compressedFile = await compressImage(file);
-      setProgress('');
-      
       const reader = new FileReader();
       reader.onload = (e) => {
         setOrders(orders.map(o => 
           o.id === orderId 
-            ? { ...o, image: compressedFile, imagePreview: e.target?.result as string }
+            ? { ...o, image: file, imagePreview: e.target?.result as string }
             : o
         ));
       };
-      reader.readAsDataURL(compressedFile);
+      reader.readAsDataURL(file);
     }
   };
 
@@ -192,7 +145,7 @@ export default function OrderPage() {
       return;
     }
 
-        // 이미지 첨부 체크 추가
+    // 이미지 첨부 체크
     const noImage = orders.filter(o => !o.image);
     if (noImage.length > 0) {
       setResult({ type: 'error', message: '모든 주문에 구매내역 캡쳐를 첨부해주세요.' });
@@ -201,20 +154,18 @@ export default function OrderPage() {
 
     setLoading(true);
     setResult(null);
-    setProgress('업로드 준비 중...');
+    setProgress('서버에 전송 중...');
 
     try {
       const formData = new FormData();
       formData.append('manager', manager);
-      formData.append('orders', JSON.stringify(orders.map(o => o.values)));  // 배열로 전송
+      formData.append('orders', JSON.stringify(orders.map(o => o.values)));
       
       orders.forEach((order) => {
         if (order.image) {
           formData.append('images', order.image);
         }
       });
-
-      setProgress('서버에 전송 중...');
 
       const response = await fetch(`${API_URL}/api/submit-orders`, {
         method: 'POST',
@@ -340,7 +291,7 @@ export default function OrderPage() {
               ) : (
                 <div style={styles.imageRow}>
                   <span style={{ fontSize: '20px' }}>📷</span>
-                  <span style={styles.imageText}>클릭하여 구매내역 캡쳐 첨부</span>
+                  <span style={styles.imageText}>클릭하여 구매내역 캡쳐 첨부 (필수)</span>
                 </div>
               )}
             </div>
