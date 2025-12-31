@@ -94,45 +94,13 @@ export default function OrderPage() {
     }
   };
 
-  // 템플릿 형식인지 확인 (콜론이 여러 개 있으면 템플릿)
-  const isTemplateFormat = (text: string): boolean => {
-    const lines = text.split('\n');
-    let colonCount = 0;
-    lines.forEach(line => {
-      if (line.includes(':')) colonCount++;
-    });
-    return colonCount >= 5; // 5개 이상 콜론이 있으면 템플릿 형식으로 간주
-  };
-
-  // 템플릿 형식에서 값 추출
-  const extractFromTemplate = (text: string): string[] => {
-    const lines = text.split('\n');
-    const values: string[] = [];
-    lines.forEach(line => {
-      const colonIndex = line.indexOf(':');
-      if (colonIndex !== -1) {
-        const value = line.substring(colonIndex + 1).trim();
-        values.push(value);
-      }
-    });
-    return values;
-  };
-
+  
   // 적용하기 버튼 - 자동으로 AI 분석 또는 템플릿 파싱
   const applyText = async (orderId: number) => {
     const text = textInputRefs.current[orderId] || '';
     
     if (!text.trim()) {
       setResult({ type: 'error', message: '텍스트를 입력해주세요.' });
-      return;
-    }
-
-    // 템플릿 형식이면 바로 파싱
-    if (isTemplateFormat(text)) {
-      const values = extractFromTemplate(text);
-      setOrders(orders.map(o => 
-        o.id === orderId ? { ...o, values, isApplied: true } : o
-      ));
       return;
     }
 
