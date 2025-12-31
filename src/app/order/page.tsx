@@ -1,4 +1,4 @@
-'use client'; 
+'use client';
 
 import { useState, useRef } from 'react';
 
@@ -39,13 +39,13 @@ interface OrderItem {
   image: File | null;
   imagePreview: string | null;
   isApplied: boolean;
-  isParsing: boolean;
+  isProcessing: boolean;
 }
 
 export default function OrderPage() {
   const [manager, setManager] = useState<string>('');
   const [orders, setOrders] = useState<OrderItem[]>([
-    { id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isParsing: false }
+    { id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isProcessing: false }
   ]);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
@@ -56,7 +56,7 @@ export default function OrderPage() {
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
   const addOrder = () => {
-    setOrders([...orders, { id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isParsing: false }]);
+    setOrders([...orders, { id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isProcessing: false }]);
   };
 
   const removeOrder = (id: number) => {
@@ -73,7 +73,7 @@ export default function OrderPage() {
       image: null,
       imagePreview: null,
       isApplied: true,
-      isParsing: false
+      isProcessing: false
     }]);
   };
 
@@ -94,18 +94,51 @@ export default function OrderPage() {
     }
   };
 
-  // AI 파싱 함수
-  const parseWithAI = async (orderId: number) => {
+  // 템플릿 형식인지 확인 (콜론이 여러 개 있으면 템플릿)
+  const isTemplateFormat = (text: string): boolean => {
+    const lines = text.split('\n');
+    let colonCount = 0;
+    lines.forEach(line => {
+      if (line.includes(':')) colonCount++;
+    });
+    return colonCount >= 5; // 5개 이상 콜론이 있으면 템플릿 형식으로 간주
+  };
+
+  // 템플릿 형식에서 값 추출
+  const extractFromTemplate = (text: string): string[] => {
+    const lines = text.split('\n');
+    const values: string[] = [];
+    lines.forEach(line => {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex !== -1) {
+        const value = line.substring(colonIndex + 1).trim();
+        values.push(value);
+      }
+    });
+    return values;
+  };
+
+  // 적용하기 버튼 - 자동으로 AI 분석 또는 템플릿 파싱
+  const applyText = async (orderId: number) => {
     const text = textInputRefs.current[orderId] || '';
     
     if (!text.trim()) {
-      setResult({ type: 'error', message: '분석할 텍스트를 입력해주세요.' });
+      setResult({ type: 'error', message: '텍스트를 입력해주세요.' });
       return;
     }
 
-    // 파싱 중 상태 표시
+    // 템플릿 형식이면 바로 파싱
+    if (isTemplateFormat(text)) {
+      const values = extractFromTemplate(text);
+      setOrders(orders.map(o => 
+        o.id === orderId ? { ...o, values, isApplied: true } : o
+      ));
+      return;
+    }
+
+    // 템플릿 형식이 아니면 AI 분석
     setOrders(prev => prev.map(o => 
-      o.id === orderId ? { ...o, isParsing: true } : o
+      o.id === orderId ? { ...o, isProcessing: true } : o
     ));
     setResult(null);
 
@@ -119,48 +152,26 @@ export default function OrderPage() {
       const data = await response.json();
 
       if (data.success && data.data) {
-        // 파싱 결과를 템플릿 형식으로 변환
-        const parsedText = FIELD_LABELS.map((label, i) => {
-          const key = FIELD_KEYS[i];
-          const value = data.data[key] || '';
-          return `${label}: ${value}`;
-        }).join('\n');
+        // AI 파싱 결과를 values 배열로 변환
+        const values = FIELD_KEYS.map(key => data.data[key] || '');
+        
+        setOrders(prev => prev.map(o => 
+          o.id === orderId ? { ...o, values, isApplied: true, isProcessing: false } : o
+        ));
 
-        textInputRefs.current[orderId] = parsedText;
-        if (textareaRefs.current[orderId]) {
-          textareaRefs.current[orderId]!.value = parsedText;
-        }
-
-        setResult({ type: 'success', message: '✨ AI 분석 완료! 내용을 확인하고 [적용하기]를 눌러주세요.' });
+        setResult({ type: 'success', message: '✨ AI 분석 완료! 내용을 확인해주세요.' });
       } else {
         setResult({ type: 'error', message: data.error || 'AI 분석 실패' });
+        setOrders(prev => prev.map(o => 
+          o.id === orderId ? { ...o, isProcessing: false } : o
+        ));
       }
     } catch (error: any) {
       setResult({ type: 'error', message: 'AI 서버 연결 실패: ' + error.message });
-    } finally {
       setOrders(prev => prev.map(o => 
-        o.id === orderId ? { ...o, isParsing: false } : o
+        o.id === orderId ? { ...o, isProcessing: false } : o
       ));
     }
-  };
-
-  // 인덱스 방식: 콜론 오른쪽 값만 순서대로 추출
-  const applyText = (orderId: number) => {
-    const text = textInputRefs.current[orderId] || '';
-    const lines = text.split('\n');
-    const values: string[] = [];
-    
-    lines.forEach(line => {
-      const colonIndex = line.indexOf(':');
-      if (colonIndex !== -1) {
-        const value = line.substring(colonIndex + 1).trim();
-        values.push(value);
-      }
-    });
-    
-    setOrders(orders.map(o => 
-      o.id === orderId ? { ...o, values, isApplied: true } : o
-    ));
   };
 
   const editOrder = (orderId: number) => {
@@ -237,7 +248,7 @@ export default function OrderPage() {
 
       if (data.success) {
         setResult({ type: 'success', message: '✅ 완료되었습니다!' });
-        setOrders([{ id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isParsing: false }]);
+        setOrders([{ id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isProcessing: false }]);
         textInputRefs.current = {};
       } else {
         setResult({ type: 'error', message: data.error || '저장 실패' });
@@ -299,35 +310,30 @@ export default function OrderPage() {
               <div style={styles.inputHeader}>
                 <div>
                   <label style={styles.label}>📝 주문 정보 입력</label>
-                  <p style={styles.hint}>* 해당되는 항목만 입력하고, 해당되지 않는 항목은 빈칸으로 제출하셔도 됩니다.</p>
-                  <p style={styles.hint}>* [적용하기]버튼 꼭 누르고 제출해주세요!</p>
+                  <p style={styles.hint}>* 주문 정보를 붙여넣고 [적용하기]를 누르면 AI가 자동 분석합니다.</p>
+                  <p style={styles.hint}>* 템플릿 형식으로 입력해도 됩니다.</p>
                 </div>
-                <div style={styles.buttonRow}>
-                  <button 
-                    onClick={() => parseWithAI(order.id)} 
-                    style={{
-                      ...styles.aiBtn,
-                      opacity: order.isParsing ? 0.7 : 1,
-                      cursor: order.isParsing ? 'not-allowed' : 'pointer'
-                    }}
-                    disabled={order.isParsing}
-                  >
-                    {order.isParsing ? '🔄 분석중...' : '🤖 AI 분석'}
-                  </button>
-                  <button onClick={() => fillTemplate(order.id)} style={styles.fillBtn}>
-                    항목 채우기
-                  </button>
-                </div>
+                <button onClick={() => fillTemplate(order.id)} style={styles.fillBtn}>
+                  항목 채우기
+                </button>
               </div>
               <textarea
                 ref={(el) => { textareaRefs.current[order.id] = el; }}
-                placeholder="복사한 주문 정보를 붙여넣기 하세요"
+                placeholder="주문 정보를 붙여넣기 하세요 (AI가 자동 분석합니다)"
                 style={styles.textarea}
                 defaultValue={textInputRefs.current[order.id] || ''}
                 onChange={(e) => { textInputRefs.current[order.id] = e.target.value; }}
               />
-              <button onClick={() => applyText(order.id)} style={styles.applyBtn}>
-                ✓ 적용하기
+              <button 
+                onClick={() => applyText(order.id)} 
+                style={{
+                  ...styles.applyBtn,
+                  opacity: order.isProcessing ? 0.7 : 1,
+                  cursor: order.isProcessing ? 'not-allowed' : 'pointer'
+                }}
+                disabled={order.isProcessing}
+              >
+                {order.isProcessing ? '🔄 AI 분석중...' : '✓ 적용하기'}
               </button>
             </div>
           ) : (
@@ -428,18 +434,6 @@ const styles: Record<string, React.CSSProperties> = {
   inputHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' },
   label: { fontWeight: '500', color: '#333' },
   hint: { fontSize: '12px', color: '#888', margin: '4px 0 0 0' },
-  buttonRow: { display: 'flex', gap: '8px' },
-  aiBtn: { 
-    backgroundColor: '#8b5cf6', 
-    color: 'white', 
-    border: 'none', 
-    padding: '6px 12px', 
-    borderRadius: '4px', 
-    cursor: 'pointer', 
-    fontSize: '12px', 
-    whiteSpace: 'nowrap',
-    fontWeight: '600'
-  },
   fillBtn: { backgroundColor: '#e9ecef', color: '#495057', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' },
   textarea: { width: '100%', height: '180px', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '14px', fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box', marginBottom: '10px' },
   applyBtn: { backgroundColor: '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
