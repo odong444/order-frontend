@@ -12,6 +12,12 @@ const FIELD_LABELS = [
   '결제금액(원 쓰지 마세요)', '아이디', '주문번호', '주소', '닉네임', '회수이름', '회수연락처'
 ];
 
+// AI 파싱용 키 (라벨과 매칭)
+const FIELD_KEYS = [
+  '제품명', '수취인명', '연락처', '은행', '계좌', '예금주',
+  '결제금액', '아이디', '주문번호', '주소', '닉네임', '회수이름', '회수연락처'
+];
+
 // 복사용 템플릿
 const TEMPLATE = `제품명: 
 수취인명: 
@@ -33,12 +39,13 @@ interface OrderItem {
   image: File | null;
   imagePreview: string | null;
   isApplied: boolean;
+  isParsing: boolean;
 }
 
 export default function OrderPage() {
   const [manager, setManager] = useState<string>('');
   const [orders, setOrders] = useState<OrderItem[]>([
-    { id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false }
+    { id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isParsing: false }
   ]);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
@@ -49,7 +56,7 @@ export default function OrderPage() {
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
   const addOrder = () => {
-    setOrders([...orders, { id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false }]);
+    setOrders([...orders, { id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isParsing: false }]);
   };
 
   const removeOrder = (id: number) => {
@@ -65,7 +72,8 @@ export default function OrderPage() {
       values: [...lastOrder.values],
       image: null,
       imagePreview: null,
-      isApplied: true
+      isApplied: true,
+      isParsing: false
     }]);
   };
 
@@ -83,6 +91,56 @@ export default function OrderPage() {
     textInputRefs.current[orderId] = TEMPLATE;
     if (textareaRefs.current[orderId]) {
       textareaRefs.current[orderId]!.value = TEMPLATE;
+    }
+  };
+
+  // AI 파싱 함수
+  const parseWithAI = async (orderId: number) => {
+    const text = textInputRefs.current[orderId] || '';
+    
+    if (!text.trim()) {
+      setResult({ type: 'error', message: '분석할 텍스트를 입력해주세요.' });
+      return;
+    }
+
+    // 파싱 중 상태 표시
+    setOrders(prev => prev.map(o => 
+      o.id === orderId ? { ...o, isParsing: true } : o
+    ));
+    setResult(null);
+
+    try {
+      const response = await fetch(`${API_URL}/api/parse-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        // 파싱 결과를 템플릿 형식으로 변환
+        const parsedText = FIELD_LABELS.map((label, i) => {
+          const key = FIELD_KEYS[i];
+          const value = data.data[key] || '';
+          return `${label}: ${value}`;
+        }).join('\n');
+
+        textInputRefs.current[orderId] = parsedText;
+        if (textareaRefs.current[orderId]) {
+          textareaRefs.current[orderId]!.value = parsedText;
+        }
+
+        setResult({ type: 'success', message: '✨ AI 분석 완료! 내용을 확인하고 [적용하기]를 눌러주세요.' });
+      } else {
+        setResult({ type: 'error', message: data.error || 'AI 분석 실패' });
+      }
+    } catch (error: any) {
+      setResult({ type: 'error', message: 'AI 서버 연결 실패: ' + error.message });
+    } finally {
+      setOrders(prev => prev.map(o => 
+        o.id === orderId ? { ...o, isParsing: false } : o
+      ));
     }
   };
 
@@ -112,6 +170,9 @@ export default function OrderPage() {
         `${label}: ${order.values[i] || ''}`
       ).join('\n');
       textInputRefs.current[orderId] = text;
+      if (textareaRefs.current[orderId]) {
+        textareaRefs.current[orderId]!.value = text;
+      }
     }
     setOrders(orders.map(o => 
       o.id === orderId ? { ...o, isApplied: false } : o
@@ -176,7 +237,7 @@ export default function OrderPage() {
 
       if (data.success) {
         setResult({ type: 'success', message: '✅ 완료되었습니다!' });
-        setOrders([{ id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false }]);
+        setOrders([{ id: Date.now(), values: [], image: null, imagePreview: null, isApplied: false, isParsing: false }]);
         textInputRefs.current = {};
       } else {
         setResult({ type: 'error', message: data.error || '저장 실패' });
@@ -241,9 +302,22 @@ export default function OrderPage() {
                   <p style={styles.hint}>* 해당되는 항목만 입력하고, 해당되지 않는 항목은 빈칸으로 제출하셔도 됩니다.</p>
                   <p style={styles.hint}>* [적용하기]버튼 꼭 누르고 제출해주세요!</p>
                 </div>
-                <button onClick={() => fillTemplate(order.id)} style={styles.fillBtn}>
-                  항목 채우기
-                </button>
+                <div style={styles.buttonRow}>
+                  <button 
+                    onClick={() => parseWithAI(order.id)} 
+                    style={{
+                      ...styles.aiBtn,
+                      opacity: order.isParsing ? 0.7 : 1,
+                      cursor: order.isParsing ? 'not-allowed' : 'pointer'
+                    }}
+                    disabled={order.isParsing}
+                  >
+                    {order.isParsing ? '🔄 분석중...' : '🤖 AI 분석'}
+                  </button>
+                  <button onClick={() => fillTemplate(order.id)} style={styles.fillBtn}>
+                    항목 채우기
+                  </button>
+                </div>
               </div>
               <textarea
                 ref={(el) => { textareaRefs.current[order.id] = el; }}
@@ -354,6 +428,18 @@ const styles: Record<string, React.CSSProperties> = {
   inputHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' },
   label: { fontWeight: '500', color: '#333' },
   hint: { fontSize: '12px', color: '#888', margin: '4px 0 0 0' },
+  buttonRow: { display: 'flex', gap: '8px' },
+  aiBtn: { 
+    backgroundColor: '#8b5cf6', 
+    color: 'white', 
+    border: 'none', 
+    padding: '6px 12px', 
+    borderRadius: '4px', 
+    cursor: 'pointer', 
+    fontSize: '12px', 
+    whiteSpace: 'nowrap',
+    fontWeight: '600'
+  },
   fillBtn: { backgroundColor: '#e9ecef', color: '#495057', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' },
   textarea: { width: '100%', height: '180px', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '14px', fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box', marginBottom: '10px' },
   applyBtn: { backgroundColor: '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
