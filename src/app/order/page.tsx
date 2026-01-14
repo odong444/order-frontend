@@ -282,6 +282,17 @@ export default function OrderPage() {
         </div>
       </div>
 
+      {/* AI 안내 공지 */}
+      <div style={styles.noticeCard}>
+        <div style={styles.noticeTitle}>🤖 AI 업데이트 공지</div>
+        <ul style={styles.noticeList}>
+          <li>이미지 업로드 하면, AI가 자동으로 데이터 작성해드립니다</li>
+          <li>주문번호가 꼭 나오는 이미지로 업로드 부탁드립니다.</li>
+          <li>이미지업로드 후, 아래에 구매아이디, 계좌정보 꼭 입력 부탁드립니다.</li>
+          <li>아직 AI가 오류가 종종 있는 단계이니, 제출 전 정보 꼭 확인 부탁드립니다.</li>
+        </ul>
+      </div>
+
       {/* 메인 이미지 업로드 */}
       <div 
         style={styles.mainUploadZone}
@@ -536,6 +547,26 @@ const styles: Record<string, React.CSSProperties> = {
     borderColor: '#667eea',
     backgroundColor: '#667eea',
     color: 'white'
+  },
+  noticeCard: {
+    backgroundColor: '#fef3c7',
+    borderRadius: '12px',
+    padding: '16px',
+    marginBottom: '16px',
+    border: '1px solid #fcd34d'
+  },
+  noticeTitle: {
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#92400e',
+    marginBottom: '10px'
+  },
+  noticeList: {
+    margin: 0,
+    paddingLeft: '18px',
+    fontSize: '13px',
+    color: '#78350f',
+    lineHeight: '1.7'
   },
   mainUploadZone: {
     backgroundColor: 'white',
