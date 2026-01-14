@@ -6,8 +6,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const MANAGERS = ['태일', '서지은', '자인'];
 
-const AUTO_FIELDS = ['제품명', '수취인명', '연락처', '주소', '주문번호', '결제금액'];
-const MANUAL_FIELDS = ['은행', '계좌', '예금주', '아이디', '닉네임', '회수이름', '회수연락처'];
+const AUTO_FIELDS = ['수취인명', '연락처', '주소', '주문번호', '결제금액'];
+const MANUAL_FIELDS = ['제품명', '아이디', '은행', '계좌', '예금주', '닉네임', '회수이름', '회수연락처'];
 const ALL_FIELD_KEYS = [
   '제품명', '수취인명', '연락처', '은행', '계좌', '예금주',
   '결제금액', '아이디', '주문번호', '주소', '닉네임', '회수이름', '회수연락처'
@@ -388,7 +388,7 @@ export default function OrderPage() {
                     value={order.manualText}
                     onChange={(e) => updateManualText(order.id, e.target.value)}
                     style={styles.manualTextarea}
-                    placeholder="카카오뱅크 3333-12-1234567 홍길동 user123"
+                    placeholder={`제품명:\n아이디:\n은행:\n계좌:\n예금주:`}
                   />
                   <button
                     onClick={() => parseManualWithAI(order.id)}
@@ -742,14 +742,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   manualTextarea: {
     width: '100%',
-    minHeight: '60px',
+    minHeight: '100px',
     padding: '10px',
     border: '1px solid #e0e0e0',
     borderRadius: '6px',
     fontSize: '13px',
     resize: 'vertical' as const,
     marginBottom: '8px',
-    boxSizing: 'border-box' as const
+    boxSizing: 'border-box' as const,
+    lineHeight: '1.6'
   },
   applyBtn: {
     width: '100%',
