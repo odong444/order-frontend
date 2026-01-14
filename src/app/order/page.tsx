@@ -201,6 +201,24 @@ export default function OrderPage() {
       return;
     }
 
+    // 직접입력 필수 항목 검증
+    const notParsed = orders.filter(o => !o.manualParsed);
+    if (notParsed.length > 0) {
+      setResult({ type: 'error', message: '직접입력 항목을 입력하고 [적용] 버튼을 눌러주세요.' });
+      return;
+    }
+
+    // 필수 항목 검증 (제품명, 아이디, 은행, 계좌, 예금주)
+    const requiredFields = ['제품명', '아이디', '은행', '계좌', '예금주'];
+    for (let i = 0; i < orders.length; i++) {
+      const order = orders[i];
+      const missingFields = requiredFields.filter(field => !order.manualData[field] || order.manualData[field].trim() === '');
+      if (missingFields.length > 0) {
+        setResult({ type: 'error', message: `#${i + 1} 주문: ${missingFields.join(', ')} 항목을 입력해주세요.` });
+        return;
+      }
+    }
+
     setLoading(true);
     setResult(null);
 
