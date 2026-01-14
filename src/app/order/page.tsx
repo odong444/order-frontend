@@ -37,6 +37,7 @@ export default function OrderPage() {
   const [orders, setOrders] = useState<OrderItem[]>([createNewOrder()]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [modalImage, setModalImage] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   function createNewOrder(): OrderItem {
@@ -318,6 +319,16 @@ export default function OrderPage() {
 
   return (
     <div style={styles.container}>
+      {/* 이미지 모달 */}
+      {modalImage && (
+        <div style={styles.modalOverlay} onClick={() => setModalImage(null)}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <button style={styles.modalClose} onClick={() => setModalImage(null)}>✕</button>
+            <img src={modalImage} alt="크게보기" style={styles.modalImage} />
+          </div>
+        </div>
+      )}
+
       <h1 style={styles.title}>📸 구매내역 제출</h1>
       <p style={styles.subtitle}>이미지를 올리면 AI가 자동으로 정보를 추출합니다</p>
 
@@ -386,7 +397,7 @@ export default function OrderPage() {
             {order.imagePreview && (
               <div style={styles.imageActions}>
                 <button 
-                  onClick={() => window.open(order.imagePreview!, '_blank')}
+                  onClick={() => setModalImage(order.imagePreview)}
                   style={styles.viewImageBtn}
                 >
                   🔍 이미지 크게보기
@@ -540,6 +551,40 @@ export default function OrderPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  modalOverlay: {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: '20px'
+  },
+  modalContent: {
+    position: 'relative' as const,
+    maxWidth: '90vw',
+    maxHeight: '90vh'
+  },
+  modalClose: {
+    position: 'absolute' as const,
+    top: '-40px',
+    right: '0',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: 'white',
+    fontSize: '30px',
+    cursor: 'pointer',
+    padding: '10px'
+  },
+  modalImage: {
+    maxWidth: '100%',
+    maxHeight: '85vh',
+    borderRadius: '8px'
+  },
   container: {
     maxWidth: '500px',
     margin: '0 auto',
