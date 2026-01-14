@@ -42,7 +42,7 @@ export default function OrderPage() {
       image: null,
       imagePreview: null,
       autoData: {},
-      manualText: '',
+      manualText: '제품명:\n아이디:\n은행:\n계좌:\n예금주:',
       manualData: {},
       isAnalyzing: false,
       isAnalyzed: false,
@@ -388,7 +388,6 @@ export default function OrderPage() {
                     value={order.manualText}
                     onChange={(e) => updateManualText(order.id, e.target.value)}
                     style={styles.manualTextarea}
-                    placeholder={`제품명:\n아이디:\n은행:\n계좌:\n예금주:`}
                   />
                   <button
                     onClick={() => parseManualWithAI(order.id)}
