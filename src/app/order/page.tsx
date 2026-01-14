@@ -7,7 +7,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const MANAGERS = ['태일', '서지은', '자인'];
 
 const AUTO_FIELDS = ['수취인명', '연락처', '주소', '주문번호', '결제금액'];
-const MANUAL_FIELDS = ['제품명', '아이디', '은행', '계좌', '예금주', '닉네임', '회수이름', '회수연락처'];
+const MANUAL_FIELDS = ['제품명', '아이디', '은행', '계좌', '예금주'];
 const ALL_FIELD_KEYS = [
   '제품명', '수취인명', '연락처', '은행', '계좌', '예금주',
   '결제금액', '아이디', '주문번호', '주소', '닉네임', '회수이름', '회수연락처'
