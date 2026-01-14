@@ -65,6 +65,87 @@ export default function OrderPage() {
     }
   };
 
+  // 여러 이미지 한번에 업로드
+  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // 첫 번째 빈 주문이 있으면 제거
+    const hasEmptyFirst = orders.length === 1 && !orders[0].image && !orders[0].isAnalyzed;
+    
+    const newOrders: OrderItem[] = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const newOrder = createNewOrder();
+      newOrder.id = Date.now() + i;
+      newOrders.push(newOrder);
+    }
+
+    // 기존 주문 + 새 주문 (빈 첫 주문 제거)
+    const updatedOrders = hasEmptyFirst 
+      ? [...newOrders]
+      : [...orders, ...newOrders];
+    
+    setOrders(updatedOrders);
+
+    // 각 이미지에 대해 OCR 분석 시작
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const orderId = newOrders[i].id;
+      
+      // 약간의 딜레이로 순차 처리 (서버 부하 방지)
+      setTimeout(() => {
+        processImageForOrder(orderId, file);
+      }, i * 500);
+    }
+
+    // input 초기화
+    e.target.value = '';
+  };
+
+  // 이미지 처리 (OCR)
+  const processImageForOrder = async (orderId: number, file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const imageData = e.target?.result as string;
+      
+      setOrders(prev => prev.map(o => 
+        o.id === orderId 
+          ? { ...o, image: file, imagePreview: imageData, isAnalyzing: true, error: null }
+          : o
+      ));
+
+      // OCR API 호출
+      try {
+        const response = await fetch(`${API_URL}/api/analyze-image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageData })
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.data) {
+          setOrders(prev => prev.map(o => 
+            o.id === orderId 
+              ? { ...o, autoData: data.data, isAnalyzing: false, isAnalyzed: true, error: null }
+              : o
+          ));
+        } else {
+          throw new Error(data.error || 'OCR 분석 실패');
+        }
+      } catch (error: any) {
+        setOrders(prev => prev.map(o => 
+          o.id === orderId 
+            ? { ...o, isAnalyzing: false, error: error.message }
+            : o
+        ));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // 이미지 업로드 및 OCR 분석
   const handleImageUpload = async (orderId: number, file: File | null) => {
     if (!file) return;
@@ -400,6 +481,24 @@ export default function OrderPage() {
         </div>
       ))}
 
+      {/* 여러 이미지 한번에 추가 */}
+      <div style={styles.bulkUploadSection}>
+        <input
+          type="file"
+          id="bulkUpload"
+          accept="image/*"
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleBulkUpload}
+        />
+        <button 
+          onClick={() => document.getElementById('bulkUpload')?.click()}
+          style={styles.bulkUploadBtn}
+        >
+          📷 이미지 여러장 한번에 추가
+        </button>
+      </div>
+
       {/* 주문 추가 버튼 */}
       <button onClick={addOrder} style={styles.addOrderBtn}>+ 주문 추가</button>
 
@@ -714,6 +813,21 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     marginBottom: '16px',
     background: 'rgba(255,255,255,0.1)'
+  },
+  bulkUploadSection: {
+    marginBottom: '12px'
+  },
+  bulkUploadBtn: {
+    width: '100%',
+    padding: '16px',
+    backgroundColor: '#10b981',
+    border: 'none',
+    borderRadius: '12px',
+    color: 'white',
+    fontSize: '15px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
   },
   resultMessage: {
     padding: '14px',
