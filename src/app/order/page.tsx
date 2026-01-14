@@ -192,8 +192,15 @@ export default function OrderPage() {
 
       // 각 주문의 데이터를 배열로 변환
       const ordersData = orders.map(order => {
-        // OCR 데이터 + AI 파싱된 직접 입력 데이터 병합
-        const merged = { ...order.autoData, ...order.manualData };
+        // OCR 데이터 기본으로 시작
+        const merged = { ...order.autoData };
+        
+        // manualData에서 값이 있는 것만 덮어쓰기
+        Object.entries(order.manualData).forEach(([key, value]) => {
+          if (value && value.trim() !== '') {
+            merged[key] = value;
+          }
+        });
         
         // ALL_FIELD_KEYS 순서대로 배열 생성
         return ALL_FIELD_KEYS.map(key => merged[key] || '');
