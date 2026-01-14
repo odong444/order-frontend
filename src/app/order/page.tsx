@@ -6,13 +6,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const MANAGERS = ['태일', '서지은', '자인'];
 
-// 자동 추출 필드 (OCR)
 const AUTO_FIELDS = ['제품명', '수취인명', '연락처', '주소', '주문번호', '결제금액'];
-
-// 직접 입력 필드 (AI 파싱)
 const MANUAL_FIELDS = ['은행', '계좌', '예금주', '아이디', '닉네임', '회수이름', '회수연락처'];
-
-// 전체 필드 순서 (시트 저장용)
 const ALL_FIELD_KEYS = [
   '제품명', '수취인명', '연락처', '은행', '계좌', '예금주',
   '결제금액', '아이디', '주문번호', '주소', '닉네임', '회수이름', '회수연락처'
@@ -22,9 +17,9 @@ interface OrderItem {
   id: number;
   image: File | null;
   imagePreview: string | null;
-  autoData: Record<string, string>;  // OCR 추출 데이터
-  manualText: string;                 // 직접 입력 텍스트
-  manualData: Record<string, string>; // AI 파싱된 직접 입력 데이터
+  autoData: Record<string, string>;
+  manualText: string;
+  manualData: Record<string, string>;
   isAnalyzing: boolean;
   isAnalyzed: boolean;
   isParsingManual: boolean;
@@ -34,11 +29,12 @@ interface OrderItem {
 
 export default function OrderPage() {
   const [manager, setManager] = useState<string>('');
-  const [orders, setOrders] = useState<OrderItem[]>([createNewOrder()]);
+  const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [modalImage, setModalImage] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const mainUploadRef = useRef<HTMLInputElement | null>(null);
 
   function createNewOrder(): OrderItem {
     return {
@@ -56,56 +52,38 @@ export default function OrderPage() {
     };
   }
 
-  const addOrder = () => {
-    setOrders([...orders, createNewOrder()]);
-  };
-
   const removeOrder = (id: number) => {
-    if (orders.length > 1) {
-      setOrders(orders.filter(o => o.id !== id));
-    }
+    setOrders(orders.filter(o => o.id !== id));
   };
 
-  // 여러 이미지 한번에 업로드
-  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 메인 이미지 업로드 (1장 또는 여러장)
+  const handleMainUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // 첫 번째 빈 주문이 있으면 제거
-    const hasEmptyFirst = orders.length === 1 && !orders[0].image && !orders[0].isAnalyzed;
-    
     const newOrders: OrderItem[] = [];
     
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
       const newOrder = createNewOrder();
       newOrder.id = Date.now() + i;
       newOrders.push(newOrder);
     }
 
-    // 기존 주문 + 새 주문 (빈 첫 주문 제거)
-    const updatedOrders = hasEmptyFirst 
-      ? [...newOrders]
-      : [...orders, ...newOrders];
-    
+    const updatedOrders = [...orders, ...newOrders];
     setOrders(updatedOrders);
 
-    // 각 이미지에 대해 OCR 분석 시작
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const orderId = newOrders[i].id;
       
-      // 약간의 딜레이로 순차 처리 (서버 부하 방지)
       setTimeout(() => {
         processImageForOrder(orderId, file);
-      }, i * 500);
+      }, i * 300);
     }
 
-    // input 초기화
     e.target.value = '';
   };
 
-  // 이미지 처리 (OCR)
   const processImageForOrder = async (orderId: number, file: File) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -117,7 +95,6 @@ export default function OrderPage() {
           : o
       ));
 
-      // OCR API 호출
       try {
         const response = await fetch(`${API_URL}/api/analyze-image`, {
           method: 'POST',
@@ -147,60 +124,18 @@ export default function OrderPage() {
     reader.readAsDataURL(file);
   };
 
-  // 이미지 업로드 및 OCR 분석
-  const handleImageUpload = async (orderId: number, file: File | null) => {
+  const handleImageChange = async (orderId: number, file: File | null) => {
     if (!file) return;
-
-    // 미리보기 생성
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const imageData = e.target?.result as string;
-      
-      setOrders(prev => prev.map(o => 
-        o.id === orderId 
-          ? { ...o, image: file, imagePreview: imageData, isAnalyzing: true, error: null }
-          : o
-      ));
-
-      // OCR API 호출
-      try {
-        const response = await fetch(`${API_URL}/api/analyze-image`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData })
-        });
-
-        const data = await response.json();
-
-        if (data.success && data.data) {
-          setOrders(prev => prev.map(o => 
-            o.id === orderId 
-              ? { ...o, autoData: data.data, isAnalyzing: false, isAnalyzed: true, error: null }
-              : o
-          ));
-        } else {
-          throw new Error(data.error || 'OCR 분석 실패');
-        }
-      } catch (error: any) {
-        setOrders(prev => prev.map(o => 
-          o.id === orderId 
-            ? { ...o, isAnalyzing: false, error: error.message }
-            : o
-        ));
-      }
-    };
-    reader.readAsDataURL(file);
+    processImageForOrder(orderId, file);
   };
 
-  // 재분석
   const retryAnalysis = (orderId: number) => {
     const order = orders.find(o => o.id === orderId);
     if (order?.image) {
-      handleImageUpload(orderId, order.image);
+      processImageForOrder(orderId, order.image);
     }
   };
 
-  // 자동 추출 필드 수정
   const updateAutoField = (orderId: number, key: string, value: string) => {
     setOrders(prev => prev.map(o => 
       o.id === orderId 
@@ -209,14 +144,12 @@ export default function OrderPage() {
     ));
   };
 
-  // 직접 입력 텍스트 수정
   const updateManualText = (orderId: number, text: string) => {
     setOrders(prev => prev.map(o => 
       o.id === orderId ? { ...o, manualText: text } : o
     ));
   };
 
-  // AI로 직접 입력 텍스트 파싱
   const parseManualWithAI = async (orderId: number) => {
     const order = orders.find(o => o.id === orderId);
     if (!order?.manualText.trim()) return;
@@ -235,7 +168,6 @@ export default function OrderPage() {
       const data = await response.json();
 
       if (data.success && data.data) {
-        // AI 파싱 결과를 manualData에 저장
         setOrders(prev => prev.map(o => 
           o.id === orderId 
             ? { ...o, manualData: data.data, isParsingManual: false, manualParsed: true }
@@ -252,16 +184,20 @@ export default function OrderPage() {
     }
   };
 
-  // 제출
   const handleSubmit = async () => {
     if (!manager) {
       setResult({ type: 'error', message: '담당자를 선택해주세요.' });
       return;
     }
 
+    if (orders.length === 0) {
+      setResult({ type: 'error', message: '이미지를 업로드해주세요.' });
+      return;
+    }
+
     const notAnalyzed = orders.filter(o => !o.isAnalyzed);
     if (notAnalyzed.length > 0) {
-      setResult({ type: 'error', message: '모든 주문의 이미지를 업로드하고 분석을 완료해주세요.' });
+      setResult({ type: 'error', message: '분석 중인 주문이 있습니다. 완료 후 제출해주세요.' });
       return;
     }
 
@@ -272,25 +208,20 @@ export default function OrderPage() {
       const formData = new FormData();
       formData.append('manager', manager);
 
-      // 각 주문의 데이터를 배열로 변환
       const ordersData = orders.map(order => {
-        // OCR 데이터 기본으로 시작
         const merged = { ...order.autoData };
         
-        // manualData에서 값이 있는 것만 덮어쓰기
         Object.entries(order.manualData).forEach(([key, value]) => {
           if (value && value.trim() !== '') {
             merged[key] = value;
           }
         });
         
-        // ALL_FIELD_KEYS 순서대로 배열 생성
         return ALL_FIELD_KEYS.map(key => merged[key] || '');
       });
 
       formData.append('orders', JSON.stringify(ordersData));
 
-      // 이미지 첨부
       orders.forEach((order) => {
         if (order.image) {
           formData.append('images', order.image);
@@ -306,7 +237,7 @@ export default function OrderPage() {
 
       if (data.success) {
         setResult({ type: 'success', message: '✅ 완료되었습니다!' });
-        setOrders([createNewOrder()]);
+        setOrders([]);
       } else {
         setResult({ type: 'error', message: data.error || '저장 실패' });
       }
@@ -351,100 +282,94 @@ export default function OrderPage() {
         </div>
       </div>
 
+      {/* 메인 이미지 업로드 */}
+      <div 
+        style={styles.mainUploadZone}
+        onClick={() => mainUploadRef.current?.click()}
+      >
+        <div style={styles.uploadIcon}>📷</div>
+        <div style={styles.uploadText}>이미지 업로드 (여러장 선택 가능)</div>
+        <div style={styles.uploadHint}>클릭하여 이미지 선택</div>
+        {orders.length > 0 && (
+          <div style={styles.uploadCount}>현재 {orders.length}건</div>
+        )}
+      </div>
+      <input
+        ref={mainUploadRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleMainUpload}
+      />
+
       {/* 주문 목록 */}
       {orders.map((order, index) => (
         <div key={order.id} style={styles.card}>
           <div style={styles.cardHeader}>
-            <span style={styles.orderNum}>주문 #{index + 1}</span>
-            {orders.length > 1 && (
-              <button onClick={() => removeOrder(order.id)} style={styles.removeBtn}>✕</button>
-            )}
+            <div style={styles.orderInfo}>
+              <span style={styles.orderNum}>#{index + 1}</span>
+              {order.isAnalyzing && <span style={styles.analyzingBadge}>분석중...</span>}
+              {order.isAnalyzed && <span style={styles.doneBadge}>✓</span>}
+              {order.error && <span style={styles.errorBadge}>!</span>}
+            </div>
+            <button onClick={() => removeOrder(order.id)} style={styles.removeBtn}>✕</button>
           </div>
 
-          {/* 이미지 업로드 */}
-          <div style={styles.imageContainer}>
-            <div
-              onClick={() => fileInputRefs.current[order.id]?.click()}
-              style={{
-                ...styles.uploadZone,
-                borderColor: order.isAnalyzed ? '#10b981' : order.isAnalyzing ? '#f59e0b' : order.error ? '#ef4444' : '#d0d0d0',
-                backgroundColor: order.isAnalyzed ? '#ecfdf5' : order.isAnalyzing ? '#fffbeb' : order.error ? '#fef2f2' : '#fafafa'
-              }}
-            >
-              {order.imagePreview ? (
-                <>
-                  <img src={order.imagePreview} alt="미리보기" style={styles.previewImage} />
-                  <div style={{
-                    ...styles.imageStatus,
-                    color: order.isAnalyzing ? '#f59e0b' : order.error ? '#ef4444' : '#10b981'
-                  }}>
-                    {order.isAnalyzing ? '🔄 AI 분석 중...' : order.error ? `❌ ${order.error}` : '✅ 분석 완료'}
-                  </div>
-                  {order.error && (
-                    <button onClick={(e) => { e.stopPropagation(); retryAnalysis(order.id); }} style={styles.retryBtn}>
-                      다시 시도
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div style={styles.uploadIcon}>📷</div>
-                  <div style={styles.uploadText}>주문 캡쳐 이미지 업로드</div>
-                  <div style={styles.uploadHint}>클릭하여 이미지 선택</div>
-                </>
-              )}
-            </div>
+          {/* 이미지 미리보기 */}
+          <div style={styles.imageRow}>
             {order.imagePreview && (
-              <div style={styles.imageActions}>
-                <button 
-                  onClick={() => setModalImage(order.imagePreview)}
-                  style={styles.viewImageBtn}
-                >
-                  🔍 이미지 크게보기
-                </button>
-                <button 
-                  onClick={() => fileInputRefs.current[order.id]?.click()}
-                  style={styles.changeImageBtn}
-                >
-                  📷 다른 이미지
-                </button>
-              </div>
+              <img src={order.imagePreview} alt="미리보기" style={styles.thumbImage} />
             )}
+            <div style={styles.imageActions}>
+              <button onClick={() => setModalImage(order.imagePreview)} style={styles.smallBtn}>
+                🔍 크게보기
+              </button>
+              <button onClick={() => fileInputRefs.current[order.id]?.click()} style={styles.smallBtn}>
+                📷 변경
+              </button>
+            </div>
+            <input
+              ref={(el) => { fileInputRefs.current[order.id] = el; }}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => handleImageChange(order.id, e.target.files?.[0] || null)}
+            />
           </div>
-          <input
-            ref={(el) => { fileInputRefs.current[order.id] = el; }}
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={(e) => handleImageUpload(order.id, e.target.files?.[0] || null)}
-          />
+
+          {order.error && (
+            <div style={styles.errorBox}>
+              ❌ {order.error}
+              <button onClick={() => retryAnalysis(order.id)} style={styles.retryBtn}>다시 시도</button>
+            </div>
+          )}
 
           {/* 분석 결과 폼 */}
           {order.isAnalyzed && (
             <div style={styles.formSection}>
-              <div style={styles.fieldGroupLabel}>🤖 자동 추출 항목</div>
+              <div style={styles.fieldGroupLabel}>🤖 자동 추출</div>
               <div style={styles.formGrid}>
                 {AUTO_FIELDS.map(field => (
                   <div key={field} style={styles.formRow}>
                     <label style={styles.formLabel}>
                       {field}
-                      {field === '주문번호' && <span style={styles.checkHint}>⚠️확인</span>}
+                      {field === '주문번호' && <span style={styles.checkHint}>⚠️</span>}
                     </label>
                     <input
                       type="text"
                       value={order.autoData[field] || ''}
                       onChange={(e) => updateAutoField(order.id, field, e.target.value)}
                       style={{
-                        ...styles.formInputAuto,
-                        ...(field === '주문번호' ? styles.orderNumInput : {})
+                        ...styles.formInput,
+                        ...(field === '주문번호' ? styles.warnInput : {})
                       }}
-                      placeholder="자동 추출됨"
                     />
                   </div>
                 ))}
               </div>
 
-              <div style={styles.fieldGroupLabel}>✍️ 직접 입력 (그냥 붙여넣기하면 AI가 자동 분류)</div>
+              <div style={styles.fieldGroupLabel}>✍️ 직접 입력</div>
               
               {!order.manualParsed ? (
                 <>
@@ -452,22 +377,22 @@ export default function OrderPage() {
                     value={order.manualText}
                     onChange={(e) => updateManualText(order.id, e.target.value)}
                     style={styles.manualTextarea}
-                    placeholder={`카카오뱅크 3333-12-1234567 홍길동 user123\n\n이렇게 그냥 붙여넣기하면 AI가 알아서 분류해요`}
+                    placeholder="카카오뱅크 3333-12-1234567 홍길동 user123"
                   />
                   <button
                     onClick={() => parseManualWithAI(order.id)}
                     disabled={order.isParsingManual || !order.manualText.trim()}
                     style={{
                       ...styles.applyBtn,
-                      opacity: (order.isParsingManual || !order.manualText.trim()) ? 0.6 : 1
+                      opacity: (order.isParsingManual || !order.manualText.trim()) ? 0.5 : 1
                     }}
                   >
-                    {order.isParsingManual ? '🔄 AI 분석 중...' : '✓ 적용하기'}
+                    {order.isParsingManual ? '분석중...' : '✓ 적용'}
                   </button>
                 </>
               ) : (
                 <>
-                  <div style={styles.parsedDataGrid}>
+                  <div style={styles.parsedGrid}>
                     {MANUAL_FIELDS.map(field => (
                       order.manualData[field] && (
                         <div key={field} style={styles.parsedItem}>
@@ -492,27 +417,6 @@ export default function OrderPage() {
         </div>
       ))}
 
-      {/* 여러 이미지 한번에 추가 */}
-      <div style={styles.bulkUploadSection}>
-        <input
-          type="file"
-          id="bulkUpload"
-          accept="image/*"
-          multiple
-          style={{ display: 'none' }}
-          onChange={handleBulkUpload}
-        />
-        <button 
-          onClick={() => document.getElementById('bulkUpload')?.click()}
-          style={styles.bulkUploadBtn}
-        >
-          📷 이미지 여러장 한번에 추가
-        </button>
-      </div>
-
-      {/* 주문 추가 버튼 */}
-      <button onClick={addOrder} style={styles.addOrderBtn}>+ 주문 추가</button>
-
       {/* 결과 메시지 */}
       {result && (
         <div style={{
@@ -525,27 +429,25 @@ export default function OrderPage() {
       )}
 
       {/* 제출 전 확인 안내 */}
-      <div style={styles.confirmNotice}>
-        ⚠️ 제출 전 확인해주세요!
-        <ul style={styles.confirmList}>
-          <li>주문번호가 이미지와 일치하나요? (5↔S, 0↔O 헷갈림 주의)</li>
-          <li>수취인명, 연락처, 주소가 정확한가요?</li>
-          <li>직접 입력 항목(은행, 계좌 등)을 입력하셨나요?</li>
-        </ul>
-      </div>
+      {orders.length > 0 && (
+        <div style={styles.confirmNotice}>
+          ⚠️ 제출 전 확인! 주문번호(5↔S, 0↔O), 직접입력 항목
+        </div>
+      )}
 
       {/* 제출 버튼 */}
-      <button
-        onClick={handleSubmit}
-        disabled={loading}
-        style={{
-          ...styles.submitBtn,
-          opacity: loading ? 0.6 : 1,
-          cursor: loading ? 'not-allowed' : 'pointer'
-        }}
-      >
-        {loading ? '⏳ 저장 중...' : `📤 ${orders.length}건 제출하기`}
-      </button>
+      {orders.length > 0 && (
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{
+            ...styles.submitBtn,
+            opacity: loading ? 0.6 : 1
+          }}
+        >
+          {loading ? '⏳ 저장 중...' : `📤 ${orders.length}건 제출하기`}
+        </button>
+      )}
     </div>
   );
 }
@@ -553,10 +455,7 @@ export default function OrderPage() {
 const styles: Record<string, React.CSSProperties> = {
   modalOverlay: {
     position: 'fixed' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.9)',
     display: 'flex',
     alignItems: 'center',
@@ -577,8 +476,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     color: 'white',
     fontSize: '30px',
-    cursor: 'pointer',
-    padding: '10px'
+    cursor: 'pointer'
   },
   modalImage: {
     maxWidth: '100%',
@@ -589,19 +487,18 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '500px',
     margin: '0 auto',
     padding: '20px',
-    backgroundColor: '#667eea',
     minHeight: '100vh',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
   },
   title: {
-    textAlign: 'center',
+    textAlign: 'center' as const,
     color: 'white',
     marginBottom: '8px',
     fontSize: '24px',
     fontWeight: '700'
   },
   subtitle: {
-    textAlign: 'center',
+    textAlign: 'center' as const,
     color: 'rgba(255,255,255,0.9)',
     marginBottom: '24px',
     fontSize: '14px'
@@ -633,271 +530,255 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
     fontWeight: '600',
     color: '#666',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
+    cursor: 'pointer'
   },
   managerBtnActive: {
     borderColor: '#667eea',
     backgroundColor: '#667eea',
     color: 'white'
   },
-  card: {
+  mainUploadZone: {
     backgroundColor: 'white',
     borderRadius: '16px',
-    padding: '20px',
-    marginBottom: '16px',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
-    position: 'relative' as const
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px'
-  },
-  orderNum: {
-    fontSize: '16px',
-    fontWeight: '700',
-    color: '#333'
-  },
-  removeBtn: {
-    width: '28px',
-    height: '28px',
-    border: 'none',
-    borderRadius: '50%',
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    fontSize: '16px',
-    cursor: 'pointer'
-  },
-  uploadZone: {
-    border: '2px dashed #d0d0d0',
-    borderRadius: '12px',
     padding: '30px 20px',
+    marginBottom: '16px',
     textAlign: 'center' as const,
     cursor: 'pointer',
-    transition: 'all 0.3s'
+    boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+    border: '2px dashed #667eea'
   },
   uploadIcon: {
-    fontSize: '48px',
-    marginBottom: '12px'
+    fontSize: '40px',
+    marginBottom: '8px'
   },
   uploadText: {
-    fontSize: '15px',
-    color: '#666',
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#333',
     marginBottom: '4px'
   },
   uploadHint: {
     fontSize: '13px',
     color: '#999'
   },
-  imageContainer: {
-    marginBottom: '0'
+  uploadCount: {
+    marginTop: '12px',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#667eea'
+  },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    padding: '16px',
+    marginBottom: '12px',
+    boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
+  },
+  cardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px'
+  },
+  orderInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  orderNum: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#667eea'
+  },
+  analyzingBadge: {
+    fontSize: '11px',
+    backgroundColor: '#fef3c7',
+    color: '#d97706',
+    padding: '2px 8px',
+    borderRadius: '10px'
+  },
+  doneBadge: {
+    fontSize: '12px',
+    backgroundColor: '#d1fae5',
+    color: '#059669',
+    padding: '2px 8px',
+    borderRadius: '10px'
+  },
+  errorBadge: {
+    fontSize: '12px',
+    backgroundColor: '#fee2e2',
+    color: '#dc2626',
+    padding: '2px 8px',
+    borderRadius: '10px'
+  },
+  removeBtn: {
+    width: '24px',
+    height: '24px',
+    border: 'none',
+    borderRadius: '50%',
+    backgroundColor: '#fee2e2',
+    color: '#dc2626',
+    fontSize: '14px',
+    cursor: 'pointer'
+  },
+  imageRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '12px'
+  },
+  thumbImage: {
+    width: '60px',
+    height: '60px',
+    objectFit: 'cover' as const,
+    borderRadius: '8px'
   },
   imageActions: {
     display: 'flex',
-    gap: '8px',
-    marginTop: '8px'
+    gap: '8px'
   },
-  viewImageBtn: {
-    flex: 1,
-    padding: '10px',
-    backgroundColor: '#3b82f6',
-    border: 'none',
-    borderRadius: '8px',
-    color: 'white',
-    fontSize: '13px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  changeImageBtn: {
-    flex: 1,
-    padding: '10px',
-    backgroundColor: '#6b7280',
-    border: 'none',
-    borderRadius: '8px',
-    color: 'white',
-    fontSize: '13px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  previewImage: {
-    maxWidth: '100%',
-    maxHeight: '150px',
-    borderRadius: '8px',
-    marginBottom: '12px'
-  },
-  imageStatus: {
-    fontSize: '14px',
-    fontWeight: '600'
-  },
-  retryBtn: {
-    marginTop: '8px',
-    padding: '8px 16px',
-    backgroundColor: '#667eea',
+  smallBtn: {
+    padding: '6px 12px',
+    backgroundColor: '#f3f4f6',
     border: 'none',
     borderRadius: '6px',
-    color: 'white',
+    fontSize: '12px',
+    cursor: 'pointer'
+  },
+  errorBox: {
+    backgroundColor: '#fef2f2',
+    color: '#dc2626',
+    padding: '10px',
+    borderRadius: '8px',
     fontSize: '13px',
+    marginBottom: '12px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  retryBtn: {
+    padding: '4px 10px',
+    backgroundColor: '#dc2626',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    fontSize: '12px',
     cursor: 'pointer'
   },
   formSection: {
-    marginTop: '20px'
+    borderTop: '1px solid #eee',
+    paddingTop: '12px'
   },
   fieldGroupLabel: {
     fontSize: '12px',
     color: '#888',
-    marginBottom: '12px',
-    paddingBottom: '8px',
-    borderBottom: '1px dashed #eee'
+    marginBottom: '8px'
   },
   formGrid: {
     display: 'grid',
-    gap: '10px',
-    marginBottom: '20px'
+    gap: '8px',
+    marginBottom: '12px'
   },
   formRow: {
     display: 'grid',
-    gridTemplateColumns: '90px 1fr',
+    gridTemplateColumns: '80px 1fr',
     alignItems: 'center',
     gap: '8px'
   },
   formLabel: {
-    fontSize: '13px',
+    fontSize: '12px',
     fontWeight: '600',
     color: '#555',
     display: 'flex',
     alignItems: 'center',
-    gap: '4px'
+    gap: '2px'
   },
   checkHint: {
     fontSize: '10px',
-    color: '#f59e0b',
-    fontWeight: '500'
+    color: '#f59e0b'
   },
-  formInputAuto: {
+  formInput: {
     width: '100%',
-    padding: '10px 12px',
-    border: '1.5px solid #86efac',
-    borderRadius: '8px',
-    fontSize: '14px',
-    backgroundColor: '#f0fdf4',
+    padding: '8px 10px',
+    border: '1px solid #e0e0e0',
+    borderRadius: '6px',
+    fontSize: '13px',
     boxSizing: 'border-box' as const
   },
-  orderNumInput: {
+  warnInput: {
     borderColor: '#fcd34d',
     backgroundColor: '#fffbeb'
   },
   manualTextarea: {
     width: '100%',
-    minHeight: '100px',
-    padding: '12px',
-    border: '1.5px solid #fcd34d',
-    borderRadius: '8px',
-    fontSize: '14px',
-    backgroundColor: '#fffbeb',
+    minHeight: '60px',
+    padding: '10px',
+    border: '1px solid #e0e0e0',
+    borderRadius: '6px',
+    fontSize: '13px',
     resize: 'vertical' as const,
-    fontFamily: 'inherit',
-    lineHeight: '1.6',
-    boxSizing: 'border-box' as const,
-    marginBottom: '10px'
+    marginBottom: '8px',
+    boxSizing: 'border-box' as const
   },
   applyBtn: {
     width: '100%',
-    padding: '12px',
+    padding: '10px',
     backgroundColor: '#10b981',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '6px',
     color: 'white',
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer'
   },
-  parsedDataGrid: {
+  parsedGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '8px',
-    marginBottom: '10px'
+    gap: '6px',
+    marginBottom: '8px'
   },
   parsedItem: {
     backgroundColor: '#f0fdf4',
-    padding: '8px 10px',
-    borderRadius: '6px',
-    border: '1px solid #86efac'
+    padding: '6px 8px',
+    borderRadius: '4px'
   },
   parsedLabel: {
     display: 'block',
-    fontSize: '11px',
-    color: '#666',
-    marginBottom: '2px'
+    fontSize: '10px',
+    color: '#666'
   },
   parsedValue: {
     display: 'block',
-    fontSize: '13px',
-    color: '#333',
-    fontWeight: '500'
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#333'
   },
   editBtn: {
-    padding: '8px 16px',
+    padding: '6px 12px',
     backgroundColor: '#6b7280',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '4px',
     color: 'white',
-    fontSize: '13px',
+    fontSize: '12px',
     cursor: 'pointer'
   },
-  addOrderBtn: {
-    width: '100%',
-    padding: '14px',
-    backgroundColor: 'white',
-    border: '2px dashed rgba(255,255,255,0.5)',
-    borderRadius: '12px',
-    color: 'white',
-    fontSize: '15px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    marginBottom: '16px',
-    background: 'rgba(255,255,255,0.1)'
-  },
-  bulkUploadSection: {
-    marginBottom: '12px'
-  },
-  bulkUploadBtn: {
-    width: '100%',
-    padding: '16px',
-    backgroundColor: '#10b981',
-    border: 'none',
-    borderRadius: '12px',
-    color: 'white',
-    fontSize: '15px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
-  },
   resultMessage: {
-    padding: '14px',
-    borderRadius: '10px',
+    padding: '12px',
+    borderRadius: '8px',
     fontSize: '14px',
     fontWeight: '600',
     textAlign: 'center' as const,
-    marginBottom: '16px'
+    marginBottom: '12px'
   },
   confirmNotice: {
     backgroundColor: '#fef3c7',
-    border: '1px solid #f59e0b',
-    borderRadius: '12px',
-    padding: '16px',
-    marginBottom: '16px',
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#92400e'
-  },
-  confirmList: {
-    margin: '10px 0 0 0',
-    paddingLeft: '20px',
+    borderRadius: '8px',
+    padding: '12px',
+    marginBottom: '12px',
     fontSize: '13px',
-    fontWeight: '500',
-    lineHeight: '1.8'
+    fontWeight: '600',
+    color: '#92400e',
+    textAlign: 'center' as const
   },
   submitBtn: {
     width: '100%',
@@ -908,7 +789,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'white',
     fontSize: '16px',
     fontWeight: '700',
-    cursor: 'pointer',
-    boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+    cursor: 'pointer'
   }
 };
