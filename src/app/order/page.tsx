@@ -383,19 +383,19 @@ export default function OrderPage() {
                   <div key={field} style={styles.formRow}>
                     <label style={styles.formLabel}>
                       {field}
-                      {field === '주문번호' && <span style={styles.checkHint}>⚠️</span>}
                     </label>
                     <input
                       type="text"
                       value={order.autoData[field] || ''}
                       onChange={(e) => updateAutoField(order.id, field, e.target.value)}
-                      style={{
-                        ...styles.formInput,
-                        ...(field === '주문번호' ? styles.warnInput : {})
-                      }}
+                      style={styles.formInput}
                     />
                   </div>
                 ))}
+              </div>
+
+              <div style={styles.manualCheckNotice}>
+                ⚠️ 모든항목이 잘 들어갔는지 확인 꼭 해주세요.
               </div>
 
               <div style={styles.fieldGroupLabel}>✍️ 직접 입력</div>
@@ -721,6 +721,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px',
     color: '#888',
     marginBottom: '8px'
+  },
+  manualCheckNotice: {
+    backgroundColor: '#fef3c7',
+    borderRadius: '8px',
+    padding: '10px',
+    marginTop: '12px',
+    marginBottom: '12px',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#92400e',
+    textAlign: 'center' as const
   },
   formGrid: {
     display: 'grid',
